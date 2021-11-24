@@ -6,6 +6,8 @@ import numpy
 import numpy as np
 import matplotlib.pyplot as plt
 
+COS_W, DOT_W, NGR_W = 0.2, 0.2, 0.6
+
 def toSearch(query, invertedInd, vocab):
     """
         input:
@@ -129,15 +131,15 @@ def processScores(scores):
         description:
             find softmax of each separate scores and compute a single score
     """
-    def softmax(vector):
+    def softmax(vector, weight):
         e = np.exp(vector)
-        return e / e.sum()
+        return (e / e.sum())*weight
 
     cs = [_[0][0] for _ in scores]
     ds = [_[0][1] for _ in scores]
     ns = [_[0][2] for _ in scores]
     file = [_[1] for _ in scores]
-    return list(zip(list(softmax(cs)+softmax(ds)+softmax(ns)), file))
+    return list(zip(list(softmax(cs, COS_W)+softmax(ds, DOT_W)+softmax(ns, NGR_W)), file))
 
 def unionQuery(query, invIndex, vocab, idf, q_vector=[]):
     """
