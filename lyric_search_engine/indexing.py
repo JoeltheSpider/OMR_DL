@@ -11,8 +11,16 @@ import enchant
 from nltk.stem.snowball import SnowballStemmer
 
 def wordNorm(text):
-    # Text normalizer: split the text in array without all spaces, stopwords, numbers
-    # Stemming all words, and return only the english words.
+    """
+        input:
+            lyrics/query (original text)
+        output:
+            list of words after the following processes.
+                - tokenize
+                - remove stop words
+                - stemming
+                - remove non-english words
+    """
     stemmer = SnowballStemmer("english")
     new_text = []
     tokenizer = RegexpTokenizer(r'\w+')
@@ -30,34 +38,50 @@ def wordNorm(text):
     return new_text #list of processed words
 
 def allWords(jsondir):
-    # This function returns in an array all the words of all lyrics (saved as JSON file)
+    """
+        input:
+            path to json directory containing all lyric jsons
+        output:
+            bag of words - list
+    """
     k = []
     count = 0
     for file in os.listdir(jsondir):
         try:
             with open(jsondir + "/" + file, "r") as f:
                 d = json.loads(f.read())
-            # print(d)
+            
             count += 1
         except:
             continue
         word_list = wordNorm(d['lyrics'])
         for item in word_list:
             k.append(item)
-        print(count, '---> JSON IN VOCABULARY')
+        print("info: ",count, 'json file processed into Vocabulary')
     return k
 
 def createVocab(allwords):
-    # This function take in input an array with all words, create the set and assign an ID to each term
-    # vocabulary = {term : termID}
+    """
+        input:
+            bag of words - list
+        output:
+            vocabulary - dict
+                with term - termID mapping
+    """
     vocabulary = {}
     word_list = sorted(list(set(allwords)))
     for ID, elem in enumerate(word_list):
         vocabulary.update({elem : ID})
     return vocabulary
 
-def term_freq(term, txt):
-# Compute the term frequencies in a given text
+def termFreq(term, txt):
+    """
+       input:
+            term - word (string)
+            text - document/lyrics (string)
+       ouput:
+            normalized term frequency (float)
+    """
     count = 0
     if len(txt) <= 0:
         return 0
@@ -70,7 +94,15 @@ def term_freq(term, txt):
 
 
 def invertedIndex(vocab ,jsondir):
-    # invIndex = {termID : (doc, TF)}
+    """
+        input:
+            vocab   - Vocabulary
+            jsondir - path of folder containing all lyric dictionaries
+        ouput:
+            invertedIndex
+                termID: posting list mapping,
+                    where each posting list entry contains (document name, tf score of term in the document)
+    """
     invIndex = {}
     counter = 0
     for file in os.listdir(jsondir):
@@ -80,7 +112,7 @@ def invertedIndex(vocab ,jsondir):
             counter += 1
             txt = wordNorm(d['lyrics'])
             for word in vocab:
-                tf = term_freq(word, txt)
+                tf = termFreq(word, txt)
                 if(tf>0):
                     try:
                         invIndex[vocab[word]] += [(file, tf)]
@@ -88,20 +120,28 @@ def invertedIndex(vocab ,jsondir):
                         invIndex[vocab[word]] = [(file, tf)]
 
 
-            print(counter, "----->IN INVERTED INDEX!")
+            print("info: ",counter, " lyrics processed into Inverted Index")
         except:
-            print("!!!!!!!!!!!IN EXCEPT",file)
+            print("error: Issue with ",file)
             pass
     return invIndex
 
 def idf(invIndex, vocab, jsondir):
-    D = len(os.listdir(jsondir))
+    """
+        description:
+            returns idf scores of each term in the vocabulary
+    """
+    N = len(os.listdir(jsondir))
     idf = {}
     for term in vocab:
-        idf[vocab[term]] = math.log((D / len(invIndex[vocab[term]])))
+        idf[vocab[term]] = math.log((N / len(invIndex[vocab[term]])))
     return(idf)
 
 def getText(file):
+    """
+        description:
+            gets lyrics of a particular song, using the file name
+    """
     with open("json/"+file) as f:
         lyrics = json.load(f)["lyrics"]
     return lyrics

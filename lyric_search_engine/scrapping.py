@@ -4,11 +4,17 @@ import json
 import time
 import os
 
-# INSERT YOUR PATH TO lyrics_collection DIRECTORY:
 directory = "./data"
 artists = ["Taylor Swift","Ed sheeran","One direction"]
 
-def scrap_artist(artist):
+def scrapArtist(artist):
+    """
+        input:
+            aritst name - string
+        description:
+            - scrapes lyrics of top 20 songs of the artists from azlyrics.com
+            - to avoid getting blocked by the website, a 5 second delay is put between every request
+    """
     link = "https://search.azlyrics.com/search.php?q={0}+{1}&w=songs&p=1".format(*artist.lower().split())
     page = requests.get(link).content
     soup = BeautifulSoup(page, "html.parser")
@@ -27,19 +33,22 @@ def scrap_artist(artist):
     
 
 def parsingAZLyrics(path):
-    # Scraping function with Beautiful soup method
-    # Extract artist and title through itemprop tag
-    # Remove all </br> tag from html page
-    # Extract the text of the songs from id tag
-    # Extract the URL from class = fb-like
-    # Store all this information for every song in a dictionary. One dict for every song.
+    """
+        input:
+            path of the lyric html
+        output:
+            processed python dictionary containing artist, title, lyrics
+        description:
+            - parse scrapped lyric html file using beautiful soup
+            - extract artist name, song title, lyrics
+    """
     az = {}
     with open(path,"r") as f:
         page = f.read()
     soup = BeautifulSoup(page, "html.parser")
 
     artists = soup.find_all('title')[0].text.split("|")[0].split("-")
-    # print(artists)
+    
     az['artist'] = artists[0].strip()
     az['title'] = artists[1].strip()
 
@@ -48,14 +57,19 @@ def parsingAZLyrics(path):
     if lyrics:
         az['lyrics'] = lyrics.get_text(separator=' ')
     else:
-        raise Exception('COPYRIGHT!')
+        raise Exception('error: Issue with lyrics')
 
     az['path'] = path.split("/")[-1]
     
     return(az)
 
 def dumpJSON(az):
-    #Generate one file JSON given the path of the file and the dictionary (az)
+    """
+        input:
+            lyric dictionary
+        description:
+            dump generated lyric json to local filesystem
+    """
     path = az["path"].replace('.html','.json')
     file = open("json/"+path, 'w')
     try:
@@ -64,16 +78,15 @@ def dumpJSON(az):
         pass
     file.close()
 
-# _ = parsingAZLyrics("data/taylorswift_alltoowell.html")
-# dumpJSON(_)
-# print(_)
-
 ############################# MAIN #############################
 
 if __name__ == "__main__":
-    for artist in artists:
-        scrap_artist(artist)
 
+    #scrap lyrics of tap songs from select artists
+    for artist in artists:
+        scrapArtist(artist)
+
+    #process/parse scrapped lyrics
     for file in os.listdir("data"):
         json_out = parsingAZLyrics("data/"+file)
         dumpJSON(json_out)

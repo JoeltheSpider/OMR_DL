@@ -1,3 +1,4 @@
+from types import coroutine
 import indexing as index
 import json
 import time
@@ -5,9 +6,14 @@ import numpy
 import numpy as np
 import matplotlib.pyplot as plt
 
-#TODO: if doclist length is 0, return random shit
 def toSearch(query, invertedInd, vocab):
-# Splits and normalize inputs and return the list of the doc name with respective tf_idf
+    """
+        input:
+            query, invertedIndex, vocabulary
+        output:
+            concatenated posting list corresponding to all terms in the query,
+                where each posting list entry contains (document name, tf score of term in the document) 
+    """
     wordToFind = index.wordNorm(query)
     IDs = []
     doclist = []
@@ -21,9 +27,13 @@ def toSearch(query, invertedInd, vocab):
     return doclist
 
 
-def vectorize(lyrics, invIndex, vocab, json_name, idf):
-# calculate tf idf vector for a particular song
-# Build number vector from lyrics song mapped on vocabulary for cosine similarity
+def vectorize(lyrics, invIndex, vocab, document_name, idf):
+    """
+        output:
+            tf-idf vector
+        description:
+            calculate tf-idf score for document with 'document_name'
+    """
     word_vector = []
     if type(lyrics)!=list:
         text = index.wordNorm(lyrics)
@@ -32,28 +42,32 @@ def vectorize(lyrics, invIndex, vocab, json_name, idf):
     for v in vocab:
         if v in text:
             for (file, tf) in invIndex[str(vocab[v])]:
-                if file == json_name:
+                if file == document_name:
                     word_vector.append(tf*idf[str(vocab[v])]) 
         else:
             word_vector.append(0)
-    return (word_vector)
+    return word_vector
 
 
 def makeQuery(query, vocab, idf):
-# Build tf vector from query mapped on vocabulary for cosine similarity
+    """
+        ouptut:
+            tf-idf score of query vector
+    """
     query_vector=[]
-    wordToFind = query
-    # wordToFind = index.wordNorm(query)
     for v in vocab:
-        if v in wordToFind:
-            query_vector.append((wordToFind.count(v)/len(wordToFind))*idf[str(vocab[v])])
+        if v in query:
+            query_vector.append((query.count(v)/len(query))*idf[str(vocab[v])])
         else:
             query_vector.append(0)
     return query_vector
 
 
-def get_cosine(vec1, vec2):
-#This metod take two vectors of number and calculate the cosine similarity.
+def getCosine(vec1, vec2):
+    """
+        output:
+            cosine similarity of two vectors
+    """
     vec_1 = numpy.array(vec1)
     vec_2 = numpy.array(vec2)
 
@@ -65,31 +79,44 @@ def get_cosine(vec1, vec2):
     try:
         return float(numerator) / denominator
     except:
-        print("Zero division error")
+        print("error: Zero division error")
         return 0
 
-def generate_ngram(words, N=2):
+def generateNgram(words, N=2):
+    """
+        input:
+            words - list of string
+            N - integer (hyper param for N-gram)
+        output:
+            Generate N-grams from 'words'
+    """
     tokens = ["0s"] + words + ["0e"]
     ngrams = []
     for i in range(len(words)+3-N):
         ngrams.append(tokens[i:i+N])
     return ngrams
 
-def find_score(query, vector_query, lyrics, invIndex, vocab, file, idf):
-
+def findScore(query, vector_query, lyrics, invIndex, vocab, file, idf):
+    """
+        description:
+            Find separate scores for a document based on the query.
+            - cosine score - for direction
+            - dot product score - for scale
+            - ngram score - for co-occurence of terms in query 
+    """
     tf_idf = vectorize(lyrics, invIndex, vocab, file, idf)
     
     # direction score
-    cosine_score = get_cosine(vector_query, tf_idf)
+    cosine_score = getCosine(vector_query, tf_idf)
     
     # scale score
     dot_score = np.dot(vector_query, tf_idf) # ?
 
     # co-occurence score
-    lyrics_ngram = generate_ngram(lyrics, 2)
+    lyrics_ngram = generateNgram(lyrics, 2)
     ngram_score = 0
     dup = []
-    for q in generate_ngram(query):
+    for q in generateNgram(query):
         if q in dup:
             continue
         dup.append(q)
@@ -97,7 +124,11 @@ def find_score(query, vector_query, lyrics, invIndex, vocab, file, idf):
     
     return cosine_score,dot_score,ngram_score
 
-def process_scores(scores):
+def processScores(scores):
+    """
+        description:
+            find softmax of each separate scores and compute a single score
+    """
     def softmax(vector):
         e = np.exp(vector)
         return e / e.sum()
@@ -108,27 +139,42 @@ def process_scores(scores):
     file = [_[1] for _ in scores]
     return list(zip(list(softmax(cs)+softmax(ds)+softmax(ns)), file))
 
-def unionQuery(query, invIndex, vocab, idf):
-# Union query return the 10 tuples (json_name, TF_IDF) of the searched query
+def unionQuery(query, invIndex, vocab, idf, q_vector=[]):
+    """
+        description:
+            Process documents even if one query term is present  
+    """
     scores = []
     q = index.wordNorm(query)
-    vector_query = makeQuery(q, vocab, idf)
+    if len(q_vector)==0:
+        vector_query = makeQuery(q, vocab, idf)
+    else:
+        vector_query = q_vector
     visited = []
     for x in set(q):
         searched = toSearch(x, invIndex, vocab)
-        for file, tf in searched: #for a single word
+        if searched == []:
+            continue
+        for file, tf in searched: 
             if file in visited:
                 continue
             visited.append(file)
-            lyrics = index.getText(file) # lyrics
+            lyrics = index.getText(file) 
             
-            score = find_score(q, vector_query, index.wordNorm(lyrics), invIndex, vocab, file, idf)
+            score = findScore(q, vector_query, index.wordNorm(lyrics), invIndex, vocab, file, idf)
            
             scores.append([score, file])
-    return sorted(process_scores(scores))[::-1][:10]
+    if scores == []:
+        print("No results found")
+        return ["None"]
+
+    return sorted(processScores(scores))[::-1][:10]
 
 def getIntersection(query, invIndex, vocab):
-# Get intersection find the name of the shared songs of the query
+    """
+        description:
+            Find common documents
+    """
     q = index.wordNorm(query)
     doc = set(tup[0] for tup in toSearch(q[0], invIndex, vocab))
     for x in q:
@@ -136,21 +182,47 @@ def getIntersection(query, invIndex, vocab):
         doc = set([tup[0] for tup in doc2]) & doc
     return doc
 
-def andQuery(query, invIndex, vocab, idf):
-# Construct the vector normalized used by kmeans algorithm, and return the word cloud of cluster.
+def andQuery(query, invIndex, vocab, idf, q_vector=[]):
+    """
+        description:
+            Process documents only if all query terms are present
+    """
     files = getIntersection(query, invIndex, vocab)
     q = index.wordNorm(query)
-    vector_query = makeQuery(q, vocab, idf)
-    
+    if len(q_vector)==0:
+        vector_query = makeQuery(q, vocab, idf)
+    else:
+        vector_query = q_vector
+    if files == []:
+        print("No results found")
+        return ["None"]
+
     scores = []
     for file in files:
         lyrics = index.getText(file)
-       # tf_idf = vectorize(lyrics, invIndex, vocab, file, idf)
-
-        score = find_score(q, vector_query, index.wordNorm(lyrics), invIndex, vocab, file, idf)
+        
+        score = findScore(q, vector_query, index.wordNorm(lyrics), invIndex, vocab, file, idf)
 
         scores.append([score, file])
-    return sorted(process_scores(scores))[::-1][:10]
+    return sorted(processScores(scores))[::-1][:10]
+
+def RRFeedback(results, query, invIndex, vocab, idf, feedback, beta=0.75, gamma=0.25):
+    """
+        output:
+            results after RR feedback
+    """
+    ind = 0
+    vector_query = np.array(makeQuery(index.wordNorm(query), vocab, idf))
+    for result in results:
+        lyrics = index.getText(result[1])
+        if feedback[ind]:
+            vector_query += beta* np.array(vectorize(lyrics, invIndex, vocab, result[1], idf)) * (1/feedback.count(1))
+        else:
+            vector_query -= gamma* np.array(vectorize(lyrics, invIndex, vocab, result[1], idf)) * (1/feedback.count(0))
+        ind +=1
+    print("info: query vector after rocchio feedback: ", vector_query)
+    return vector_query
+
 
 ############################# MAIN #############################
 
@@ -169,6 +241,7 @@ if __name__ == "__main__":
         idf = json.load(f)
     print("info: IDF scores retrieved")
 
+    # user interface
     while(True):
         n = input('0: for Lenient query\n1: for Strict query\n\nEnter choice:\t')
 
@@ -178,15 +251,33 @@ if __name__ == "__main__":
             start_time = time.time()
             results = unionQuery(query, inverted_index, vocab, idf)
             print('Execution Time:', (time.time() - start_time))
+            ind = 0
             for result in results:
-                print('SCORE:',result)
+                print(ind+1, '- SCORE:',result)
+                ind+=1
+            feedback = [int(z) for z in input("Enter relevant/not: ").split(" ")]
+            q_vector = RRFeedback(results, query, inverted_index, vocab, idf, feedback)
+            results = unionQuery(query, inverted_index, vocab, idf, q_vector)
+            ind = 0
+            for result in results:
+                print(ind+1, '- SCORE:',result)
+                ind+=1
         elif n == '1':
             query = input('Type query:')
             print('Searching query...')
             start_time = time.time()
             results = andQuery(query, inverted_index, vocab, idf)
             print('Execution Time:', (time.time() - start_time))
+            ind = 0
             for result in results:
-                print(result)
+                print(ind+1, '- SCORE:',result)
+                ind+=1
+            feedback = [int(z) for z in input("Enter relevant/not: ").split(" ")]
+            q_vector = RRFeedback(results, query, inverted_index, vocab, idf, feedback)
+            results = andQuery(query, inverted_index, vocab, idf, q_vector)
+            ind = 0
+            for result in results:
+                print(ind+1, '- SCORE:',result)
+                ind+=1
         else:
             break
