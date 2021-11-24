@@ -6,7 +6,7 @@ import os
 
 # INSERT YOUR PATH TO lyrics_collection DIRECTORY:
 directory = "./data"
-artists = ["taylor swift", "Ed sheeran",""]
+artists = ["Taylor Swift","Ed sheeran","One direction"]
 
 def scrap_artist(artist):
     link = "https://search.azlyrics.com/search.php?q={0}+{1}&w=songs&p=1".format(*artist.lower().split())
@@ -19,7 +19,10 @@ def scrap_artist(artist):
         _ = requests.get(song["href"]).content
         s_soup = BeautifulSoup(_, "html.parser")
         with open(directory+"/"+"_".join(song["href"].split("/")[-2:]),"w") as f:
-            f.write(str(s_soup))
+            try:
+                f.write(str(s_soup))
+            except:
+                pass
         time.sleep(5)
     
 
@@ -65,11 +68,12 @@ def dumpJSON(az):
 # dumpJSON(_)
 # print(_)
 
-# main
+############################# MAIN #############################
 
-#for artist in artists:
-#    scrap_artist(artists)
+if __name__ == "__main__":
+    for artist in artists:
+        scrap_artist(artist)
 
-for file in os.listdir("data"):
-    json_out = parsingAZLyrics("data/"+file)
-    dumpJSON(json_out)
+    for file in os.listdir("data"):
+        json_out = parsingAZLyrics("data/"+file)
+        dumpJSON(json_out)
