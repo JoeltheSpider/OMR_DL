@@ -1,2 +1,2 @@
 # OMR_DL
-Optical music recognition using a deep learning approach
+Lyrics search engine (changed subject)
